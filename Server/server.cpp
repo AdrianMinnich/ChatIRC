@@ -8,16 +8,16 @@
 
 #define BUF_LENGTH 512
 
-const int MAX_CLIENTS = 100; // TO DO: retire from this
+//const int MAX_CLIENTS = 100; // TO DO: retire from this
 
 struct Client
 {
-	int id;
+	const int id;
 	SOCKET socket;
 	std::string nick;
 };
 
-int thread_client(Client &new_client, std::vector<Client> &clients);
+int thread_client(int index, std::vector<Client> &clients);
 
 int main(int argc, char *argv[])
 {
@@ -33,10 +33,10 @@ int main(int argc, char *argv[])
 	addrinfo hint; // hold host address and socket type information
 	addrinfo *server = NULL;
 	SOCKET server_socket = INVALID_SOCKET;
-	std::vector<Client> clients(MAX_CLIENTS);
-	//std::vector<Client> clients;
-	std::thread threads[MAX_CLIENTS]; //vector instead of an array
-	//std::vector<std::thread> threads;
+	//std::vector<Client> clients(MAX_CLIENTS);
+	//std::thread threads[MAX_CLIENTS]; //vector instead of an array 
+	std::vector<Client> clients;
+	std::vector<std::thread> threads;
 
 	std::string msg = "";
 	int num_clients = 0;
@@ -66,8 +66,7 @@ int main(int argc, char *argv[])
 
 	// setup socket options
 	int OPTION_VALUE = 1; // setsockopt
-	setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char *) &OPTION_VALUE, sizeof(int)); // SOL_SOCKET - all, SO_REUSEADDR - zezwala na ponowne wykorzystanie tego samego numeru portu przez gniazdo bez koniecznosci odczekiwania czasu okreslonego stala TCP_TIMEWAIT_LEN
-	//setsockopt(server_socket, IPPROTO_TCP, TCP_NODELAY, "1", sizeof(int));
+	setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char *) &OPTION_VALUE, sizeof(int)); // SOL_SOCKET - all, SO_REUSEADDR - allows to use the same port for listening
 
 	// bind address to socket
 	std::cout << "Binding socket.\n";
@@ -78,10 +77,10 @@ int main(int argc, char *argv[])
 	listen(server_socket, SOMAXCONN);
 
 	// initialize the client list
-	for (int i = 0; i < MAX_CLIENTS; i++)
-	{
-		clients[i] = { -1, INVALID_SOCKET };
-	}
+	///for (int i = 0; i < MAX_CLIENTS; i++)
+	//{
+	//	clients[i] = { -1, INVALID_SOCKET };
+	//}
  
 	// wait for requests
 	while (1)
@@ -94,13 +93,15 @@ int main(int argc, char *argv[])
 
 		temp_id++;
 
-		clients[temp_id].socket = incoming;
-		clients[temp_id].id = temp_id;
+		//clients[temp_id].socket = incoming;
+		//clients[temp_id].id = temp_id;
+		clients.push_back({ temp_id, incoming });
 
 		num_clients++;
 		
 		// create thread process for every client which receives message from this client and sends it to other clients
-		threads[temp_id] = std::thread(thread_client, std::ref(clients[temp_id]), std::ref(clients)); //pushback
+
+		threads.push_back(std::thread(thread_client, temp_id, std::ref(clients))); // vector doesn't work
 		
 	}
 
@@ -108,7 +109,7 @@ int main(int argc, char *argv[])
 	closesocket(server_socket);
 
 	// close client sockets
-	for (int i = 0; i < num_clients; i++)
+	for (int i = 0; i < clients.size(); i++)
 	{
 		threads[i].detach();
 		closesocket(clients[i].socket);
@@ -121,52 +122,53 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-int thread_client(Client &new_client, std::vector<Client> &clients)
+int thread_client(int index, std::vector<Client> &clients)
 {
 	std::string msg = "";
 	char tempmsg[BUF_LENGTH] = ""; 
 
 	// receive nick from client
 	char nickname[BUF_LENGTH] = "";
-	recv(new_client.socket, nickname, BUF_LENGTH, 0);
-	new_client.nick = nickname;
+	recv(clients[index].socket, nickname, BUF_LENGTH, 0);
+	clients[index].nick = nickname;
 
 	// send the id to client
-	std::cout << new_client.nick << " connected to the server ID: " << new_client.id << std::endl;
-	msg = std::to_string(new_client.id);
-	send(new_client.socket, msg.c_str(), strlen(msg.c_str()), 0);
+	std::cout << clients[index].nick << " connected to the server ID: " << clients[index].id << std::endl;
+	msg = std::to_string(clients[index].id);
+	send(clients[index].socket, msg.c_str(), strlen(msg.c_str()), 0);
 
 	while (1)
 	{		
 		memset(tempmsg, 0, BUF_LENGTH);
+		msg = "";
 
-		if (new_client.socket != 0)
+		if (clients[index].socket != 0)
 		{
-			int iResult = recv(new_client.socket, tempmsg, BUF_LENGTH, 0);
+			int iResult = recv(clients[index].socket, tempmsg, BUF_LENGTH, 0);
 
 			if (iResult != SOCKET_ERROR)
 			{
 				if (strcmp("", tempmsg))
-					msg = "<" + new_client.nick + "> " + tempmsg;
+					msg = "<" + clients[index].nick + "> " + tempmsg;
 
 				std::cout << msg.c_str() << std::endl;
 
-				// broadcast message to other clients co jesli jednoczesnie??? 1 watek jest wlascicielem 1 socketa tylko on operuje na tym sockecie. dac do kolejki i watki patrza u siebie i wysylaja u siebie. komunikacja miedzy watkami. 
+				// broadcast message to other clients 
 				for (int i = 0; i < (signed) clients.size(); i++)
 				{
-					if (new_client.id != i)
+					if (clients[index].id != i)
 						iResult = send(clients[i].socket, msg.c_str(), strlen(msg.c_str()), 0);
 				}
 
 			}
 			else
 			{
-				msg = new_client.nick + " has disconnected from the server.";
+				msg = clients[index].nick + " has disconnected from the server.";
 				std::cout << msg << std::endl;
 
-				closesocket(new_client.socket);
-				closesocket(clients[new_client.id].socket);
-				clients[new_client.id].socket = INVALID_SOCKET;
+				closesocket(clients[index].socket);
+				//closesocket(clients[new_client.id].socket);
+				clients[clients[index].id].socket = INVALID_SOCKET;
 
 				// broadcast the disconnection message to other clients
 				for (int i = 0; i < (signed) clients.size(); i++)
