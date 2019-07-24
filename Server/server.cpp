@@ -8,8 +8,6 @@
 
 #define BUF_LENGTH 512
 
-//const int MAX_CLIENTS = 100; // TO DO: retire from this
-
 struct Client
 {
 	const int id;
@@ -33,8 +31,6 @@ int main(int argc, char *argv[])
 	addrinfo hint; // hold host address and socket type information
 	addrinfo *server = NULL;
 	SOCKET server_socket = INVALID_SOCKET;
-	//std::vector<Client> clients(MAX_CLIENTS);
-	//std::thread threads[MAX_CLIENTS]; //vector instead of an array 
 	std::vector<Client> clients;
 	std::vector<std::thread> threads;
 
@@ -64,10 +60,6 @@ int main(int argc, char *argv[])
 	std::cout << "Creating server socket.\n";
 	server_socket = socket(server->ai_family, server->ai_socktype, server->ai_protocol);
 
-	// setup socket options
-	int OPTION_VALUE = 1; // setsockopt
-	setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char *) &OPTION_VALUE, sizeof(int)); // SOL_SOCKET - all, SO_REUSEADDR - allows to use the same port for listening
-
 	// bind address to socket
 	std::cout << "Binding socket.\n";
 	bind(server_socket, server->ai_addr, (int)server->ai_addrlen);
@@ -76,33 +68,24 @@ int main(int argc, char *argv[])
 	std::cout << "Listening.\n";
 	listen(server_socket, SOMAXCONN);
 
-	// initialize the client list
-	///for (int i = 0; i < MAX_CLIENTS; i++)
-	//{
-	//	clients[i] = { -1, INVALID_SOCKET };
-	//}
- 
 	// wait for requests
 	while (1)
 	{
 		SOCKET incoming = INVALID_SOCKET;
 		incoming = accept(server_socket, NULL, NULL);
 
-		if (incoming == INVALID_SOCKET) 
+		if (incoming == INVALID_SOCKET)
 			continue;
 
 		temp_id++;
 
-		//clients[temp_id].socket = incoming;
-		//clients[temp_id].id = temp_id;
 		clients.push_back({ temp_id, incoming });
 
-		num_clients++;
-		
-		// create thread process for every client which receives message from this client and sends it to other clients
+		//num_clients++;
 
-		threads.push_back(std::thread(thread_client, temp_id, std::ref(clients))); // vector doesn't work
-		
+		// create thread process for every client which receives message from this client and sends it to other clients
+		threads.push_back(std::thread(thread_client, temp_id, std::ref(clients)));
+
 	}
 
 	// close listening socket
@@ -125,7 +108,7 @@ int main(int argc, char *argv[])
 int thread_client(int index, std::vector<Client> &clients)
 {
 	std::string msg = "";
-	char tempmsg[BUF_LENGTH] = ""; 
+	char tempmsg[BUF_LENGTH] = "";
 
 	// receive nick from client
 	char nickname[BUF_LENGTH] = "";
@@ -138,7 +121,7 @@ int thread_client(int index, std::vector<Client> &clients)
 	send(clients[index].socket, msg.c_str(), strlen(msg.c_str()), 0);
 
 	while (1)
-	{		
+	{
 		memset(tempmsg, 0, BUF_LENGTH);
 		msg = "";
 
@@ -154,7 +137,7 @@ int thread_client(int index, std::vector<Client> &clients)
 				std::cout << msg.c_str() << std::endl;
 
 				// broadcast message to other clients 
-				for (int i = 0; i < (signed) clients.size(); i++)
+				for (int i = 0; i < (signed)clients.size(); i++)
 				{
 					if (clients[index].id != i)
 						iResult = send(clients[i].socket, msg.c_str(), strlen(msg.c_str()), 0);
@@ -167,11 +150,10 @@ int thread_client(int index, std::vector<Client> &clients)
 				std::cout << msg << std::endl;
 
 				closesocket(clients[index].socket);
-				//closesocket(clients[new_client.id].socket);
 				clients[clients[index].id].socket = INVALID_SOCKET;
 
 				// broadcast the disconnection message to other clients
-				for (int i = 0; i < (signed) clients.size(); i++)
+				for (int i = 0; i < (signed)clients.size(); i++)
 				{
 					iResult = send(clients[i].socket, msg.c_str(), strlen(msg.c_str()), 0);
 				}
