@@ -1,4 +1,4 @@
 # ChatServer
-Simple IRC server which allows to connect couple of clients. IP address and listening port of the server are given as first and second command argument.
+Simple multithreaded IRC server which allows to connect multiple clients. Server need to be run with first parameter as a listening port.
 
 TO DO: Change checking message length from client to server side
